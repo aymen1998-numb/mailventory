@@ -6,8 +6,9 @@ order parser → SQLite inventory/orders. No cloud backend, no JS build step.
 ## Commands
 
 - Setup: `python -m venv .venv`, `.venv\Scripts\Activate.ps1`, `pip install -e ".[dev]"`
-- Run: `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` (creates tables on startup)
+- Run: `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` (applies pending migrations on startup)
 - Tests: `pytest`; one test: `pytest tests/test_pdf_parser.py::test_parses_order_header_and_items`
+- New migration: `alembic revision --autogenerate -m "add x"` then `alembic upgrade head`
 - Quick ingest: `python -m app.cli ingest --limit 5`
 - Full sync: `python -m app.cli sync --all` (omit `--all` to resume from checkpoint)
 - Demo data without Gmail: `python -m app.cli seed-demo` (creates `DEMO-1001` + products)
@@ -52,8 +53,10 @@ order parser → SQLite inventory/orders. No cloud backend, no JS build step.
 
 - Sync uses an in-process thread and lock. Run a single uvicorn worker
   (`--workers 1`); SQLite is in WAL mode for reader/writer overlap.
-- No migrations: `init_db()` only runs `create_all`. Schema changes require
-  deleting `data/` in dev or introducing a migration tool.
+- Migrations are Alembic (`migrations/`, `alembic.ini`). `init_db()` upgrades to
+  `head` on startup and stamps a pre-migration database at head instead of
+  rebuilding it. Never go back to `Base.metadata.create_all` for the app DB;
+  schema changes need a revision (`alembic revision --autogenerate -m "..."`).
 - Gmail needs an app password (2FA enabled); the account password fails. The
   password is stored in plain text in `.env` — keep it local and revocable.
 - Ingestion is read-only, so messages stay unread and may appear on every run —

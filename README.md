@@ -1,5 +1,7 @@
 # Local Order Desk
 
+![CI](https://github.com/aymen1998-numb/mailventory/actions/workflows/ci.yml/badge.svg)
+
 A local-only, single-user "SaaS" for turning Gmail purchase-order emails into
 tracked orders and inventory. Everything runs on your machine: no cloud backend,
 no third-party parsing APIs, no frontend build step.
@@ -156,7 +158,7 @@ pytest tests/test_pdf_parser.py::test_parses_order_header_and_items
 app/
   main.py                 # FastAPI routes, Jinja filters
   config.py               # .env-backed settings
-  db.py                   # SQLite engine, create_all
+  db.py                   # SQLite engine, runs Alembic on startup
   models.py               # emails, attachments, products, orders, stock, sync state
   cli.py                  # ingest / sync / seed-demo commands
   services/
@@ -171,6 +173,7 @@ app/
   templates/              # Jinja + HTMX fragments (settings, sync status, guide)
   static/                 # CSS and vendored htmx.min.js
 tests/
+migrations/               # Alembic environment and schema revisions
 data/                     # SQLite DB + attachments (gitignored)
 ```
 
@@ -183,5 +186,10 @@ data/                     # SQLite DB + attachments (gitignored)
 - Fillable forms never run during ingestion and stay off unless
   `COMMONFORMS_ENABLED=true`. Upstream `commonforms` has no license file, so it is
   called as an external command and never copied, imported or pinned here.
-- Schema changes use `create_all` only (no migrations yet); delete `data/` in
-  development or add a migration tool before evolving the schema.
+- Schema changes ship as Alembic revisions. `init_db()` upgrades to `head` on
+  startup, and stamps an existing pre-migration database instead of rebuilding it.
+  Add one with `alembic revision --autogenerate -m "..."`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

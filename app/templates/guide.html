@@ -231,8 +231,9 @@
     <code>127.0.0.1</code> only — do not expose it to the internet.
   </p>
   <p class="hint">
-    Deleting <code>data/</code> resets the app. There are no migrations yet, so a
-    schema change also means starting from an empty database.
+    Deleting <code>data/</code> resets the app. Schema changes ship as migrations
+    and are applied automatically the next time the server starts, so an existing
+    database keeps its data when the app is updated.
   </p>
 </section>
 
