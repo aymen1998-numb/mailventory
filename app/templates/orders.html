@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Orders · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Orders</h1>
+  <p class="muted">Imported from PDF attachments. Receiving an order increases stock once.</p>
+</div>
+
+<div class="filters">
+  <a class="pill {% if not current_status %}active{% endif %}" href="/orders">All</a>
+  {% for s in statuses %}
+    <a class="pill {% if current_status == s %}active{% endif %}" href="/orders?status={{ s }}">{{ s }}</a>
+  {% endfor %}
+</div>
+
+<section class="panel">
+  {% if orders %}
+  <table>
+    <thead>
+      <tr><th>Order</th><th>Supplier</th><th>Date</th><th>Items</th><th class="num">Total</th><th>Status</th><th>Move to</th></tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+        {% include "partials/order_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">No orders{% if current_status %} with status “{{ current_status }}”{% endif %}.</p>
+  {% endif %}
+</section>
+{% endblock %}

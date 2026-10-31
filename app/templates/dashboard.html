@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <p class="muted">Email → PDF → purchase order → stock. All on this machine.</p>
+</div>
+
+{% if not imap_configured %}
+  <div class="notice">
+    Gmail is not connected yet. Open <a href="/settings">Settings</a>, add your
+    Gmail address and a Google app password, then scan your mail for PDF orders.
+  </div>
+{% endif %}
+
+<section class="cards">
+  <div class="card"><span class="label">Open orders</span><strong>{{ counts.open_orders }}</strong><span class="muted">{{ counts.orders }} total</span></div>
+  <div class="card"><span class="label">Emails imported</span><strong>{{ counts.emails }}</strong><span class="muted">IMAP source</span></div>
+  <div class="card"><span class="label">Products tracked</span><strong>{{ counts.products }}</strong><span class="muted">in inventory</span></div>
+  <div class="card {% if counts.low_stock %}warn{% endif %}"><span class="label">Low stock</span><strong>{{ counts.low_stock }}</strong><span class="muted">at or below reorder level</span></div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Recent orders</h2>
+    <a href="/orders" class="small">View all →</a>
+  </div>
+  {% if recent_orders %}
+  <table>
+    <thead>
+      <tr><th>Order</th><th>Supplier</th><th>Date</th><th>Items</th><th class="num">Total</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for order in recent_orders %}
+        {% include "partials/order_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">No orders yet. Click <strong>Ingest Gmail</strong> to read PDF attachments.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Reorder soon</h2>
+    <a href="/inventory" class="small">Inventory →</a>
+  </div>
+  {% if low_stock %}
+  <table>
+    <thead><tr><th>SKU</th><th>Product</th><th class="num">Stock</th><th class="num">Reorder at</th></tr></thead>
+    <tbody>
+      {% for product in low_stock %}
+      <tr>
+        <td class="mono">{{ product.sku or "—" }}</td>
+        <td>{{ product.name }}</td>
+        <td class="num">{{ product.stock_qty|qty }}</td>
+        <td class="num">{{ product.reorder_level|qty }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">Nothing below its reorder level.</p>
+  {% endif %}
+</section>
+{% endblock %}

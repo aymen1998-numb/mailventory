@@ -1,0 +1,22 @@
+<tr id="order-{{ order.id }}">
+  <td>
+    <a href="/orders/{{ order.id }}">{{ order.order_number }}</a>
+    {% if order.notes %}<div class="muted small">{{ order.notes }}</div>{% endif %}
+  </td>
+  <td>{{ order.supplier or "—" }}</td>
+  <td>{{ order.order_date|date }}</td>
+  <td>{{ order.items|length }}</td>
+  <td class="num">{{ order.total_amount|money(order.currency) }}</td>
+  <td><span class="badge status-{{ order.status }}">{{ order.status }}</span></td>
+  <td>
+    <form class="inline" hx-post="/orders/{{ order.id }}/status" hx-target="#order-{{ order.id }}" hx-swap="outerHTML">
+      <select name="status" aria-label="New status">
+        {% for s in allowed_next(order.status) %}
+        <option value="{{ s }}" {% if s == order.status %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Apply</button>
+    </form>
+    {% if error %}<div class="error small">{{ error }}</div>{% endif %}
+  </td>
+</tr>

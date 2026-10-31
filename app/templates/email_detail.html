@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ email.subject or "Email" }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <a class="small" href="/emails">← Emails</a>
+  <h1>{{ email.subject or "(no subject)" }}</h1>
+  <p class="muted">{{ email.sender }} · {{ email.received_at|dt }}</p>
+</div>
+
+<section class="panel">
+  <h2>Attachments</h2>
+  {% if email.attachments %}
+  <table>
+    <thead><tr><th>File</th><th>Status</th><th class="num">Size</th><th>Order</th></tr></thead>
+    <tbody>
+      {% for a in email.attachments %}
+      <tr>
+        <td>{{ a.filename }}</td>
+        <td><span class="badge status-{{ a.parse_status }}">{{ a.parse_status }}</span>{% if a.parse_error %}<div class="error small">{{ a.parse_error }}</div>{% endif %}</td>
+        <td class="num">{{ (a.size_bytes / 1024)|round(1) }} KB</td>
+        <td>{% if a.order %}<a href="/orders/{{ a.order.id }}">{{ a.order.order_number }}</a>{% else %}—{% endif %}</td>
+      </tr>
+      {% if a.extracted_text %}
+      <tr>
+        <td colspan="4">
+          <details><summary class="small">Extracted text</summary><pre>{{ a.extracted_text }}</pre></details>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">No PDF attachments.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Body</h2>
+  <pre class="body">{{ email.body_text or "(empty)" }}</pre>
+</section>
+{% endblock %}

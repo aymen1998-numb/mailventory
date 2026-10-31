@@ -1,0 +1,35 @@
+<div id="sync-status"
+     {% if running %}hx-get="/sync/status" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% if run %}
+    <div class="sync-line">
+      <span class="badge status-{{ run.status }}">{{ run.status }}</span>
+      <span>{{ run.message or "Waiting…" }}</span>
+    </div>
+    {% if run.total > 0 %}
+      {% set pct = (run.processed / run.total * 100) | round(1) %}
+      <div class="progress"><span style="width: {{ pct }}%"></span></div>
+      <p class="muted small">
+        {{ run.processed }} / {{ run.total }} scanned ·
+        {{ run.imported }} order(s) imported{% if run.errors %} · {{ run.errors }} error(s){% endif %}
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="empty">No sync has run yet.</p>
+  {% endif %}
+
+  <div class="actions">
+    <form action="/sync" method="post">
+      <input type="hidden" name="mode" value="new">
+      <button class="primary" type="submit" {% if running or not cfg.imap_configured %}disabled{% endif %}>
+        Sync new PDF mail
+      </button>
+    </form>
+    <form action="/sync" method="post"
+          onsubmit="return confirm('Re-scan the whole mailbox? This can take a while.');">
+      <input type="hidden" name="mode" value="all">
+      <button type="submit" {% if running or not cfg.imap_configured %}disabled{% endif %}>
+        Re-scan all PDF mail
+      </button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Emails · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Emails</h1>
+  <p class="muted">Last 100 imported messages. Ingest is read-only on Gmail.</p>
+</div>
+
+<section class="panel">
+  {% if emails %}
+  <table>
+    <thead><tr><th>Subject</th><th>From</th><th>Received</th><th class="num">PDFs</th><th>Orders</th></tr></thead>
+    <tbody>
+      {% for email in emails %}
+      <tr>
+        <td><a href="/emails/{{ email.id }}">{{ email.subject or "(no subject)" }}</a></td>
+        <td>{{ email.sender }}</td>
+        <td>{{ email.received_at|dt }}</td>
+        <td class="num">{{ email.attachments|length }}</td>
+        <td>
+          {% for order in email.orders %}
+            <a class="small" href="/orders/{{ order.id }}">{{ order.order_number }}</a>{% if not loop.last %}, {% endif %}
+          {% else %}—{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">No emails imported yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

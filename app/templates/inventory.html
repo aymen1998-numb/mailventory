@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Inventory · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Inventory</h1>
+  <p class="muted">Stock is increased when an order moves to <strong>received</strong>.</p>
+</div>
+
+<section class="panel">
+  {% if products %}
+  <table>
+    <thead>
+      <tr><th>SKU</th><th>Product</th><th class="num">Stock</th><th class="num">Reorder at</th><th>Adjust stock</th></tr>
+    </thead>
+    <tbody>
+      {% for product in products %}
+        {% include "partials/inventory_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">No products yet. They are created from parsed order line items.</p>
+  {% endif %}
+</section>
+{% endblock %}

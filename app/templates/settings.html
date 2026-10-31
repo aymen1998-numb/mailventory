@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Gmail settings · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Gmail settings</h1>
+  <p class="muted">
+    Credentials are stored locally in <code>.env</code>. The app only talks to Gmail
+    over IMAP and never sends your data to another service.
+  </p>
+</div>
+
+{% if not cfg.imap_configured %}
+<div class="notice">
+  Not connected yet. You need a Google <strong>app password</strong>: enable 2-step
+  verification, then create one at
+  <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>.
+  Use that 16-character password here, never your normal Google password.
+</div>
+{% endif %}
+
+<section class="panel">
+  <h2>1. Connect Gmail</h2>
+  <form class="settings-form" action="/settings" method="post">
+    <label>Gmail address
+      <input type="email" name="gmail_address" value="{{ cfg.gmail_address }}"
+             placeholder="you@gmail.com" autocomplete="username" required>
+    </label>
+    <label>App password
+      <input type="password" name="gmail_app_password" autocomplete="new-password"
+             placeholder="{% if cfg.gmail_app_password %}Saved ({{ password_masked }}) — leave blank to keep{% else %}16-character app password{% endif %}">
+    </label>
+    <p class="hint">
+      Stored in <code>{{ env_path }}</code>. Leave the password blank to keep the current one.
+    </p>
+
+    <details>
+      <summary>Advanced sync options</summary>
+      <div class="details-body">
+        <label>Quick-ingest mailbox
+          <input type="text" name="imap_mailbox" value="{{ cfg.imap_mailbox }}">
+        </label>
+        <label>Full-sync mailbox
+          <input type="text" name="sync_mailbox" value="{{ cfg.sync_mailbox }}"
+                 placeholder="auto-detect Gmail All Mail">
+        </label>
+        <label>Gmail search query
+          <input type="text" name="gmail_query" value="{{ cfg.gmail_query }}">
+        </label>
+        <label>Max emails per sync
+          <input type="number" name="sync_max_emails" value="{{ cfg.sync_max_emails }}" min="0">
+        </label>
+        <p class="hint">
+          <code>0</code> means no cap. The default query
+          <code>has:attachment filename:pdf</code> limits the scan to emails with PDFs;
+          clear it to scan every message in the mailbox (slower).
+        </p>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button class="primary" type="submit">Save settings</button>
+    </div>
+  </form>
+  <form action="/settings/test" method="post" class="actions">
+    <button type="submit" {% if not cfg.imap_configured %}disabled{% endif %}>Test connection</button>
+    <span class="hint">Uses the last saved values. Save first if you just changed them.</span>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>2. Scan mail for orders</h2>
+  {% include "partials/sync_status.html" %}
+  <p class="hint">
+    The full scan uses Gmail's All Mail folder (auto-detected, works with localized
+    mailbox names) and only downloads PDF attachments. Duplicates are skipped by
+    message id. Emails without a parseable PDF appear under
+    <a href="/emails">Emails</a> with a review status.
+  </p>
+</section>
+
+<section class="panel">
+  <h2>Command line</h2>
+  <pre>python -m app.cli ingest --limit 10
+python -m app.cli sync --all</pre>
+</section>
+{% endblock %}

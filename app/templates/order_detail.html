@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_number }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <a class="small" href="/orders">← Orders</a>
+  <h1>{{ order.order_number }}</h1>
+  <p class="muted">
+    {{ order.supplier or "Unknown supplier" }} ·
+    <span class="badge status-{{ order.status }}">{{ order.status }}</span>
+    {% if order.stock_applied %}<span class="badge">stock applied</span>{% endif %}
+  </p>
+</div>
+
+<section class="cards">
+  <div class="card"><span class="label">Order date</span><strong class="small-strong">{{ order.order_date|date }}</strong></div>
+  <div class="card"><span class="label">Total</span><strong class="small-strong">{{ order.total_amount|money(order.currency) }}</strong></div>
+  <div class="card"><span class="label">Items</span><strong>{{ order.items|length }}</strong></div>
+</section>
+
+<section class="panel">
+  <h2>Line items</h2>
+  <table>
+    <thead><tr><th>SKU</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line total</th></tr></thead>
+    <tbody>
+      {% for item in order.items %}
+      <tr>
+        <td class="mono">{{ item.sku or "—" }}</td>
+        <td>{{ item.description }}{% if item.product %} <a class="small" href="/inventory">in stock: {{ item.product.stock_qty|qty }}</a>{% endif %}</td>
+        <td class="num">{{ item.quantity|qty }}</td>
+        <td class="num">{{ item.unit_price|money(order.currency) }}</td>
+        <td class="num">{{ item.line_total|money(order.currency) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>Source</h2>
+  <dl class="meta">
+    <dt>Email</dt>
+    <dd>{% if email %}<a href="/emails/{{ email.id }}">{{ email.subject or "(no subject)" }}</a> · {{ email.sender }}{% else %}—{% endif %}</dd>
+    <dt>PDF</dt>
+    <dd>{% if attachment %}{{ attachment.filename }} <span class="muted small">({{ attachment.parse_status }})</span>{% else %}—{% endif %}</dd>
+    <dt>Notes</dt>
+    <dd>{{ order.notes or "—" }}</dd>
+  </dl>
+</section>
+
+{% if attachment and attachment.extracted_text %}
+<section class="panel">
+  <details>
+    <summary>Extracted PDF text</summary>
+    <pre>{{ attachment.extracted_text }}</pre>
+  </details>
+</section>
+{% endif %}
+{% endblock %}

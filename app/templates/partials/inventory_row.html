@@ -1,0 +1,20 @@
+{% set low = product.reorder_level > 0 and product.stock_qty <= product.reorder_level %}
+<tr id="product-{{ product.id }}">
+  <td class="mono">{{ product.sku or "—" }}</td>
+  <td>{{ product.name }} <span class="muted small">/ {{ product.unit }}</span></td>
+  <td class="num {% if low %}low{% endif %}">{{ product.stock_qty|qty }}</td>
+  <td class="num">
+    <form class="inline" action="/inventory/{{ product.id }}/reorder" method="post">
+      <input type="number" name="level" value="{{ product.reorder_level }}" step="0.01" min="0" class="tiny">
+      <button type="submit" class="link">save</button>
+    </form>
+  </td>
+  <td>
+    <form class="inline" hx-post="/inventory/{{ product.id }}/adjust" hx-target="#product-{{ product.id }}" hx-swap="outerHTML">
+      <input type="number" name="delta" value="0" step="0.01" class="tiny" aria-label="Stock change">
+      <input type="text" name="reason" placeholder="reason" class="tiny reason">
+      <button type="submit">Apply</button>
+    </form>
+    {% if error %}<div class="error small">{{ error }}</div>{% endif %}
+  </td>
+</tr>
