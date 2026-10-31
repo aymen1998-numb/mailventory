@@ -151,6 +151,9 @@ button.link { border: none; background: none; color: var(--accent); padding: 0 4
 .settings-form { display: grid; gap: 14px; max-width: 620px; }
 .settings-form label { display: grid; gap: 5px; font-size: 13px; color: var(--muted); }
 .settings-form input { width: 100%; }
+.settings-form label.checkbox { display: flex; align-items: center; gap: 8px; }
+.settings-form input[type="checkbox"] { width: auto; }
+.row-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .details-body { display: grid; gap: 12px; padding: 10px 0 0 4px; }
 .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
 .sync-line { display: flex; gap: 10px; align-items: center; }

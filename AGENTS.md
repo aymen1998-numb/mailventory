@@ -27,9 +27,17 @@ order parser → SQLite inventory/orders. No cloud backend, no JS build step.
   `SyncRun` row for the HTMX progress bar, and checkpoints `SyncState.last_uid`.
   `mode="all"` resets the checkpoint; `UIDVALIDITY` changes reset it automatically.
   Stale runs are marked failed at startup.
-- `services/pdf_parser.py` is deliberately regex/heuristic (pdfplumber text).
-  Supplier layouts differ: change the patterns and add a case to
+- `services/pdf_parser.py` is deliberately regex/heuristic (pdfplumber text and
+  ruled tables). Supplier layouts differ: change the patterns and add a case to
   `tests/test_pdf_parser.py` instead of special-casing one PDF in the UI.
+  `extract_pdf()` returns text **and** `page.extract_tables()` output; a table is
+  only used when `_is_item_header()` sees description + quantity + price/total
+  columns, and matched table rows then replace flat-text line parsing. New column
+  vocabulary goes in `TABLE_HEADER_HINTS`, with a case in `tests/test_pdf_tables.py`.
+- `services/fillable_forms.py` shells out to an externally installed `commonforms`
+  command to write `<name>-fillable.pdf` next to an attachment. Upstream has no
+  license file, so **never** vendor, import or pin that package here; the feature is
+  gated by `COMMONFORMS_ENABLED` and never runs during ingestion.
 - Ingestion saves PDFs to `data/attachments/email-<id>/`, creates products from
   line items, and generates `MAIL-<email>-<n>` when no order number is found.
 - `services/orders.py` is the status machine. Stock increases exactly once when
@@ -51,6 +59,8 @@ order parser → SQLite inventory/orders. No cloud backend, no JS build step.
 - Default Gmail query is `has:attachment filename:pdf`. An empty query scans every
   message, which is much slower and stores every email body locally.
 - Scanned PDFs become `needs_ocr`, not parse errors. OCR is optional.
+- The optional `commonforms` bridge writes a second PDF beside the original. Do not
+  turn it into a parse path: it returns empty fields, not values.
 - Local-only by design: bind `127.0.0.1`; never expose the app publicly.
 - Tests use in-memory SQLite. `tests/conftest.py` imports `app.db`, which creates
   the `data/` directory, but tests never touch the real database.

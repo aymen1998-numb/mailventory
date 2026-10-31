@@ -11,7 +11,7 @@
   <h2>Attachments</h2>
   {% if email.attachments %}
   <table>
-    <thead><tr><th>File</th><th>Status</th><th class="num">Size</th><th>Order</th></tr></thead>
+    <thead><tr><th>File</th><th>Status</th><th class="num">Size</th><th>Order</th><th>PDF</th></tr></thead>
     <tbody>
       {% for a in email.attachments %}
       <tr>
@@ -19,10 +19,22 @@
         <td><span class="badge status-{{ a.parse_status }}">{{ a.parse_status }}</span>{% if a.parse_error %}<div class="error small">{{ a.parse_error }}</div>{% endif %}</td>
         <td class="num">{{ (a.size_bytes / 1024)|round(1) }} KB</td>
         <td>{% if a.order %}<a href="/orders/{{ a.order.id }}">{{ a.order.order_number }}</a>{% else %}—{% endif %}</td>
+        <td>
+          <div class="row-actions">
+            <a class="small" href="/attachments/{{ a.id }}/file">Download</a>
+            {% if a.id in fillable_ids %}
+              <a class="small" href="/attachments/{{ a.id }}/fillable-form">Fillable copy</a>
+            {% elif commonforms_enabled %}
+              <form action="/attachments/{{ a.id }}/fillable-form" method="post">
+                <button class="link" type="submit" {% if not commonforms_installed %}title="Install commonforms first: pipx install commonforms"{% endif %}>Make fillable</button>
+              </form>
+            {% endif %}
+          </div>
+        </td>
       </tr>
       {% if a.extracted_text %}
       <tr>
-        <td colspan="4">
+        <td colspan="5">
           <details><summary class="small">Extracted text</summary><pre>{{ a.extracted_text }}</pre></details>
         </td>
       </tr>

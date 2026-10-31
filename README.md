@@ -4,7 +4,7 @@ A local-only, single-user "SaaS" for turning Gmail purchase-order emails into
 tracked orders and inventory. Everything runs on your machine: no cloud backend,
 no third-party parsing APIs, no frontend build step.
 
-**Pipeline:** Gmail IMAP → PDF attachments → PDF text extraction (optional OCR) →
+**Pipeline:** Gmail IMAP → PDF attachments → text layer **and ruled tables** →
 heuristic order parser → SQLite orders, products and stock movements → HTMX UI.
 
 ## Features
@@ -13,12 +13,14 @@ heuristic order parser → SQLite orders, products and stock movements → HTMX 
 - In-app Gmail login/settings page, stored locally in `.env`
 - Full-mailbox background scan with progress, resumable by IMAP UID
 - Stores PDFs locally under `data/attachments/`
+- Table-aware parsing: ruled line-item tables win over flat-text matching
 - Heuristic parsing of order number, supplier, date, line items and totals
 - Product catalogue created automatically from parsed line items
 - Order workflow: `new → confirmed → shipped → received → closed` (or `cancelled`)
 - Stock is increased exactly once, when an order is marked `received`
 - Dashboard, order table, inventory with manual adjustments, email/PDF viewer
 - Optional OCR hook for scanned PDFs (Tesseract + Poppler)
+- Optional “make this PDF fillable” button via an isolated `commonforms` install
 
 ## Quickstart
 
@@ -91,6 +93,33 @@ pip install -e ".[ocr]"
 Then set `OCR_ENABLED=true` in `.env`. Without OCR, scanned PDFs are stored and
 marked `needs_ocr` instead of failing.
 
+## Fillable forms (optional)
+
+The **Make fillable** button on an email's attachment turns a source PDF into a
+copy with empty, clickable form fields. It is useful when a supplier sends a blank
+order form you want to fill by hand.
+
+This is **not** OCR and it does not extract values: parsing stays local and rule
+based, and fillable copies are only ever an extra file next to the original.
+
+The work is done by the separate
+[commonforms](https://github.com/jbarrow/commonforms) command, which you install
+yourself, outside this project:
+
+```powershell
+pipx install commonforms
+```
+
+Then enable it under **Settings → Fillable forms**. The default command name is
+`commonforms`; override it with `COMMONFORMS_COMMAND` if `pipx` put it elsewhere.
+
+Two deliberate constraints:
+
+- **Nothing from commonforms is vendored, imported or pinned here.** Upstream has
+  no license file at the time of writing, so this repository only calls its CLI.
+- **It is off by default** and never runs during ingestion. Detection needs
+  `torch`, `transformers`, `rfdetr` and friends, plus a model download on first use.
+
 ## Parser tuning
 
 The parser is intentionally rule based (`app/services/pdf_parser.py`). Real
@@ -100,6 +129,14 @@ supplier layouts vary, so:
 2. Open **Emails → attachment → Extracted text** to see what pdfplumber read.
 3. Adjust `ORDER_NUMBER_RE`, `DATE_RE`, `TOTAL_RE` or `ITEM_LINE_RE`.
 4. Add a case to `tests/test_pdf_parser.py` so the layout stays supported.
+
+For PDFs with ruled line-item tables, `extract_pdf()` also returns
+`page.extract_tables()` output. A table counts as a line-item table only when its
+header row has a description **and** a quantity column plus a price or total
+column, so address blocks and signature boxes are ignored. Matching columns are
+listed in `TABLE_HEADER_HINTS`; extend that dict (and
+`tests/test_pdf_tables.py`) for a new supplier vocabulary. When a table parses,
+its rows replace flat-text line matching.
 
 Orders without a detectable order number get a generated `MAIL-<email>-<n>` id.
 
@@ -123,7 +160,8 @@ app/
     imap_client.py        # read-only IMAP, All Mail detection, UID search/fetch
     gmail_sync.py         # background sync runs + progress
     credentials.py        # safe .env updates
-    pdf_parser.py         # pdfplumber text + regex order parsing, OCR hook
+    pdf_parser.py         # pdfplumber text + tables, regex order parsing, OCR hook
+    fillable_forms.py     # optional bridge to the external commonforms CLI
     ingest.py             # persistence: email -> attachment -> order -> products
     orders.py             # status machine + stock application
     suppliers.py
@@ -139,5 +177,8 @@ data/                     # SQLite DB + attachments (gitignored)
 - `.env`, `data/`, and the database are gitignored. The app password is stored in
   plain text in `.env`; use a dedicated app password you can revoke at any time.
 - Sync uses a daemon thread, so run a single uvicorn process (no `--workers`).
+- Fillable forms never run during ingestion and stay off unless
+  `COMMONFORMS_ENABLED=true`. Upstream `commonforms` has no license file, so it is
+  called as an external command and never copied, imported or pinned here.
 - Schema changes use `create_all` only (no migrations yet); delete `data/` in
   development or add a migration tool before evolving the schema.

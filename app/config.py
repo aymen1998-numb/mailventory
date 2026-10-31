@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Scanned PDFs stay unparsed until OCR extras are installed (see README).
     ocr_enabled: bool = False
 
+    # Optional: shell out to an isolated `commonforms` install to turn an
+    # attachment into a PDF with empty fillable fields. Nothing is vendored, and
+    # upstream has no license file, so this stays opt-in. See README.
+    commonforms_enabled: bool = False
+    commonforms_command: str = "commonforms"
+
     @property
     def imap_configured(self) -> bool:
         return bool(self.gmail_address and self.gmail_app_password)

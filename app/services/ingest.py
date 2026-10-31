@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..config import Settings
 from ..models import Attachment, EmailMessage, Order, OrderItem, Product
 from .imap_client import FetchedEmail
-from .pdf_parser import extract_pdf_text, parse_order
+from .pdf_parser import extract_pdf, parse_order
 from .suppliers import supplier_from_sender
 
 
@@ -105,22 +105,25 @@ def _ingest_attachment(
     db.flush()
 
     try:
-        text, method = extract_pdf_text(target, ocr_enabled=settings.ocr_enabled)
+        content = extract_pdf(target, ocr_enabled=settings.ocr_enabled)
     except Exception as exc:
         attachment.parse_status = "error"
         attachment.parse_error = str(exc)[:2000]
         return False
 
-    attachment.extracted_text = text
-    if not text:
+    attachment.extracted_text = content.text
+    if not content.text:
         attachment.parse_status = "needs_ocr"
         attachment.parse_error = "No embedded text; enable OCR to read scanned PDFs."
         return False
 
     parsed = parse_order(
-        text,
+        content.text,
         supplier_hint=supplier_hint,
-        order_number_hint=f"MAIL-{email.id}-{index}" if not _has_order_number(text) else None,
+        order_number_hint=f"MAIL-{email.id}-{index}"
+        if not _has_order_number(content.text)
+        else None,
+        tables=content.tables,
     )
     if not parsed.items:
         attachment.parse_status = "needs_review"
@@ -143,7 +146,7 @@ def _ingest_attachment(
         total_amount=total,
         email_id=email.id,
         attachment_id=attachment.id,
-        notes=f"Imported from {filename} ({method} extraction)",
+        notes=f"Imported from {filename} ({content.method} extraction)",
     )
     db.add(order)
     db.flush()

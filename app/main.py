@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -24,6 +24,7 @@ from .models import (
     StockMovement,
     SyncRun,
 )
+from .services import fillable_forms
 from .services.credentials import mask_secret, update_env
 from .services.gmail_sync import get_running_run, mark_interrupted_runs, start_sync
 from .services.imap_client import ImapError, fetch_emails, test_connection
@@ -240,7 +241,12 @@ def emails_page(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/emails/{email_id}", response_class=HTMLResponse)
-def email_detail(email_id: int, request: Request, db: Session = Depends(get_db)):
+def email_detail(
+    email_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
     email = db.scalar(
         select(EmailMessage)
         .options(selectinload(EmailMessage.attachments), selectinload(EmailMessage.orders))
@@ -248,7 +254,78 @@ def email_detail(email_id: int, request: Request, db: Session = Depends(get_db))
     )
     if email is None:
         raise HTTPException(404, "Email not found")
-    return templates.TemplateResponse(request, "email_detail.html", {"email": email})
+    cfg = get_settings()
+    fillable_ids = {
+        attachment.id
+        for attachment in email.attachments
+        if fillable_forms.fillable_path(Path(attachment.path)).exists()
+    }
+    return templates.TemplateResponse(
+        request,
+        "email_detail.html",
+        {
+            "email": email,
+            "flash": flash,
+            "fillable_ids": fillable_ids,
+            "commonforms_enabled": cfg.commonforms_enabled,
+            "commonforms_installed": fillable_forms.is_available(cfg.commonforms_command),
+        },
+    )
+
+
+def _attachment_or_404(db: Session, attachment_id: int) -> Attachment:
+    attachment = db.get(Attachment, attachment_id)
+    if attachment is None:
+        raise HTTPException(404, "Attachment not found")
+    return attachment
+
+
+def _pdf_or_404(path: Path) -> Path:
+    if not path.exists():
+        raise HTTPException(404, "PDF is missing from disk")
+    return path
+
+
+@app.get("/attachments/{attachment_id}/file")
+def attachment_file(attachment_id: int, db: Session = Depends(get_db)):
+    attachment = _attachment_or_404(db, attachment_id)
+    path = _pdf_or_404(Path(attachment.path))
+    return FileResponse(path, media_type="application/pdf", filename=attachment.filename)
+
+
+@app.get("/attachments/{attachment_id}/fillable-form")
+def download_fillable_form(attachment_id: int, db: Session = Depends(get_db)):
+    attachment = _attachment_or_404(db, attachment_id)
+    path = _pdf_or_404(fillable_forms.fillable_path(Path(attachment.path)))
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
+@app.post("/attachments/{attachment_id}/fillable-form")
+def create_fillable_form(attachment_id: int, db: Session = Depends(get_db)):
+    cfg = get_settings()
+    attachment = _attachment_or_404(db, attachment_id)
+    back = f"/emails/{attachment.email_id}"
+
+    if not cfg.commonforms_enabled:
+        return RedirectResponse(
+            back
+            + "?flash="
+            + quote("Fillable forms are off. Enable them under Settings, in section 3."),
+            status_code=303,
+        )
+
+    try:
+        source = _pdf_or_404(Path(attachment.path))
+        target = fillable_forms.prepare_fillable_form(source, command=cfg.commonforms_command)
+        message = f"Fillable form ready: {target.name}"
+    except fillable_forms.CommonFormsError as exc:
+        message = str(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:  # keep the page usable if the tool misbehaves
+        message = f"Could not build the fillable form: {exc}"
+
+    return RedirectResponse(back + "?flash=" + quote(message), status_code=303)
 
 
 @app.post("/ingest")
@@ -289,6 +366,7 @@ def settings_page(
             "running": get_running_run(db) is not None,
             "flash": flash,
             "env_path": BASE_DIR.parent / ".env",
+            "commonforms_installed": fillable_forms.is_available(cfg.commonforms_command),
         },
     )
 
@@ -324,6 +402,24 @@ def save_settings(
     return RedirectResponse(
         "/settings?flash="
         + quote("Saved locally. Use Test connection, then start a sync."),
+        status_code=303,
+    )
+
+
+@app.post("/settings/commonforms")
+def save_commonforms_settings(
+    enabled: str = Form(default=""),
+    command: str = Form("commonforms"),
+):
+    updates = {
+        "COMMONFORMS_ENABLED": "true" if enabled else "false",
+        "COMMONFORMS_COMMAND": command.strip() or "commonforms",
+    }
+    update_env(BASE_DIR.parent / ".env", updates)
+    get_settings.cache_clear()
+    return RedirectResponse(
+        "/settings?flash="
+        + quote("Fillable form settings saved."),
         status_code=303,
     )
 

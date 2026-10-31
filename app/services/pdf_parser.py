@@ -46,6 +46,19 @@ ITEM_LINE_RE = re.compile(
 SKIP_LINE_RE = re.compile(
     r"^(?:subtotal|total|tax|vat|shipping|page\s+\d+|thank you)\b", re.IGNORECASE
 )
+NUMBER_RE = re.compile(r"-?\d[\d.,]*")
+
+# Column headers seen in supplier line-item tables. The longest matching hint
+# wins, so "unit price" beats "price" and "total price" beats "price".
+TABLE_HEADER_HINTS: dict[str, tuple[str, ...]] = {
+    "sku": ("item no", "part no", "reference", "article", "sku", "code", "ref"),
+    "description": ("description", "designation", "product", "item", "desc", "name"),
+    "quantity": ("quantity", "qty", "quantite", "units", "pcs"),
+    "unit_price": ("unit price", "unit cost", "price", "prix", "rate"),
+    "line_total": ("line total", "total price", "total amount", "total", "amount", "montant"),
+}
+# A table only counts as a line-item table when it has these columns plus money.
+REQUIRED_TABLE_ROLES = ("description", "quantity")
 
 
 @dataclass
@@ -71,16 +84,40 @@ class ParsedOrder:
         return bool(self.order_number and self.items)
 
 
-def extract_pdf_text(path: Path, *, ocr_enabled: bool = False) -> tuple[str, str]:
-    """Return (text, method) where method is ``text``, ``ocr`` or ``empty``."""
+@dataclass
+class PdfContent:
+    """Everything the parser needs from one PDF: text, how it was read, and tables."""
+
+    text: str
+    method: str
+    tables: list[list[list[str]]] = field(default_factory=list)
+
+
+def extract_pdf(path: Path, *, ocr_enabled: bool = False) -> PdfContent:
+    """Return the text layer plus any line-item tables found in the PDF.
+
+    ``method`` is ``text``, ``ocr`` or ``empty``.
+    """
+    tables: list[list[list[str]]] = []
     with pdfplumber.open(str(path)) as pdf:
         text = "\n".join((page.extract_text() or "") for page in pdf.pages).strip()
+        for page in pdf.pages:
+            for table in page.extract_tables() or []:
+                if table:
+                    tables.append(table)
 
     if text:
-        return text, "text"
+        return PdfContent(text=text, method="text", tables=tables)
     if ocr_enabled:
-        return ocr_pdf(path), "ocr"
-    return "", "empty"
+        # OCR output is plain text; pdfplumber found no text layer, so no tables.
+        return PdfContent(text=ocr_pdf(path), method="ocr")
+    return PdfContent(text="", method="empty")
+
+
+def extract_pdf_text(path: Path, *, ocr_enabled: bool = False) -> tuple[str, str]:
+    """Return (text, method). Kept for callers that only need the text."""
+    content = extract_pdf(path, ocr_enabled=ocr_enabled)
+    return content.text, content.method
 
 
 def ocr_pdf(path: Path) -> str:
@@ -103,6 +140,7 @@ def parse_order(
     *,
     supplier_hint: str | None = None,
     order_number_hint: str | None = None,
+    tables: list[list[list[str]]] | None = None,
 ) -> ParsedOrder:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     joined = "\n".join(lines)
@@ -132,7 +170,10 @@ def parse_order(
     total_match = TOTAL_RE.search(joined)
     order.total_amount = _parse_money(total_match.group("amount")) if total_match else None
 
-    order.items = _parse_items(lines)
+    # Tables beat line matching: a real column layout survives multi-word
+    # descriptions and prices that the flat-text regex would misread.
+    table_items = items_from_tables(tables) if tables else []
+    order.items = table_items or _parse_items(lines)
     return order
 
 
@@ -159,6 +200,123 @@ def _parse_items(lines: list[str]) -> list[ParsedItem]:
             )
         )
     return items
+
+
+def items_from_tables(tables: list[list[list[str]]]) -> list[ParsedItem]:
+    """Turn pdfplumber tables into line items, skipping tables without a header."""
+    items: list[ParsedItem] = []
+    for table in tables:
+        items.extend(_items_from_table(table))
+    return items
+
+
+def _items_from_table(table: list[list[str | None]]) -> list[ParsedItem]:
+    rows = [[_clean_cell(cell) for cell in row] for row in table]
+    rows = [row for row in rows if any(row)]
+
+    for index, row in enumerate(rows[:6]):
+        roles = _column_roles(row)
+        if _is_item_header(roles):
+            return _items_from_rows(rows[index + 1 :], roles)
+    return []
+
+
+def _items_from_rows(
+    rows: list[list[str]], roles: dict[str, int]
+) -> list[ParsedItem]:
+    items: list[ParsedItem] = []
+    for row in rows:
+        description = _cell(row, roles.get("description"))
+        if not description or not re.search(r"[A-Za-z]", description):
+            continue
+        if SKIP_LINE_RE.match(description):
+            continue
+
+        quantity = _cell_number(_cell(row, roles.get("quantity")))
+        unit_price = _cell_number(_cell(row, roles.get("unit_price")))
+        line_total = _cell_number(_cell(row, roles.get("line_total")))
+
+        # Fill in whichever of qty / price / total the layout left out.
+        if line_total is None and quantity and unit_price is not None:
+            line_total = (quantity * unit_price).quantize(Decimal("0.01"))
+        if unit_price is None and quantity and line_total is not None:
+            unit_price = (line_total / quantity).quantize(Decimal("0.01"))
+        if quantity is None and unit_price and line_total:
+            quantity = (line_total / unit_price).quantize(Decimal("0.001"))
+
+        if not quantity or quantity <= 0:
+            continue
+        if unit_price is None and line_total is None:
+            continue
+
+        items.append(
+            ParsedItem(
+                description=description.strip(" .-"),
+                sku=_sku_from_cell(_cell(row, roles.get("sku"))),
+                quantity=quantity,
+                unit_price=unit_price,
+                line_total=line_total,
+            )
+        )
+    return items
+
+
+def _column_roles(header: list[str]) -> dict[str, int]:
+    roles: dict[str, int] = {}
+    for index, cell in enumerate(header):
+        role = _classify_header_cell(cell)
+        if role and role not in roles:
+            roles[role] = index
+    return roles
+
+
+def _classify_header_cell(cell: str) -> str | None:
+    key = _normalize_header(cell)
+    if not key:
+        return None
+    best_role: str | None = None
+    best_length = 0
+    for role, hints in TABLE_HEADER_HINTS.items():
+        for hint in hints:
+            if hint in key and len(hint) > best_length:
+                best_role, best_length = role, len(hint)
+    return best_role
+
+
+def _is_item_header(roles: dict[str, int]) -> bool:
+    if any(role not in roles for role in REQUIRED_TABLE_ROLES):
+        return False
+    return "unit_price" in roles or "line_total" in roles
+
+
+def _normalize_header(cell: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", (cell or "").lower())).strip()
+
+
+def _clean_cell(cell: str | None) -> str:
+    return re.sub(r"\s+", " ", (cell or "").replace("\n", " ")).strip()
+
+
+def _cell(row: list[str], index: int | None) -> str:
+    if index is None or index >= len(row):
+        return ""
+    return row[index]
+
+
+def _cell_number(cell: str) -> Decimal | None:
+    if not cell:
+        return None
+    match = NUMBER_RE.search(cell)
+    return _parse_decimal(match.group(0)) if match else None
+
+
+def _sku_from_cell(cell: str) -> str | None:
+    value = cell.strip()
+    if not value or len(value) > 30 or " " in value:
+        return None
+    if not re.search(r"\d", value) and not value.isupper():
+        return None
+    return value
 
 
 def _parse_date(value: str) -> date | None:
@@ -195,5 +353,7 @@ def _parse_decimal(value: str) -> Decimal | None:
         return None
 
 
-def _parse_money(value: str) -> Decimal | None:
+def _parse_money(value: str | None) -> Decimal | None:
+    if not value:
+        return None
     return _parse_decimal(re.sub(r"[€$£]", "", value))

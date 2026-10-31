@@ -51,3 +51,12 @@ def test_ignores_lines_without_price():
 
     assert order.order_number == "X-1"
     assert order.items == []
+
+
+def test_line_without_line_total_is_computed():
+    # Regression: the optional trailing column used to crash with
+    # "expected string or bytes-like object, got 'NoneType'".
+    order = parse_order("Order No: PO-1\nSKU-1 Widget A 10 x 12.50")
+
+    assert len(order.items) == 1
+    assert order.items[0].line_total == Decimal("125.00")

@@ -79,6 +79,42 @@
 </section>
 
 <section class="panel">
+  <h2>3. Fillable forms (optional)</h2>
+  <p class="hint">
+    Turns a source PDF into a copy with empty, clickable form fields — useful for
+    filling in a supplier's order form by hand. This is <strong>not</strong> OCR and
+    does not read values or line items; parsing stays local and rule based.
+  </p>
+  <p class="hint">
+    Powered by the separate
+    <a href="https://github.com/jbarrow/commonforms" target="_blank" rel="noreferrer">commonforms</a>
+    command, installed by you outside this project (<code>pipx install commonforms</code>).
+    Nothing from it is bundled or imported here.
+  </p>
+  <p class="hint">
+    Status:
+    {% if commonforms_installed %}
+      <span class="badge status-parsed">command found</span>
+    {% else %}
+      <span class="badge status-needs_review">not installed</span>
+    {% endif %}
+  </p>
+  <form class="settings-form" action="/settings/commonforms" method="post">
+    <label class="checkbox">
+      <input type="checkbox" name="enabled" value="true" {% if cfg.commonforms_enabled %}checked{% endif %}>
+      Enable “Make fillable” buttons on the email page
+    </label>
+    <label>Command
+      <input type="text" name="command" value="{{ cfg.commonforms_command }}"
+             placeholder="commonforms">
+    </label>
+    <div class="actions">
+      <button class="primary" type="submit">Save</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
   <h2>Command line</h2>
   <pre>python -m app.cli ingest --limit 10
 python -m app.cli sync --all</pre>
