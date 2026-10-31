@@ -20,6 +20,10 @@ ocr = ["pytesseract>=0.3.13", "pdf2image>=1.17", "pillow>=10.4"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = [
+    # Starlette wants httpx2 in its own TestClient; not something this project controls.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.ruff]
 line-length = 100

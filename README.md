@@ -37,6 +37,9 @@ Open <http://127.0.0.1:8000/settings>, enter your Gmail address and app password
 click **Test connection**, then **Sync new PDF mail** (or **Re-scan all PDF mail**
 for the whole mailbox). Progress updates live on the same page.
 
+The same instructions — plus the order workflow, parser tuning and troubleshooting —
+are built into the app at <http://127.0.0.1:8000/guide>.
+
 To preview the UI without Gmail, seed demo data:
 
 ```powershell
@@ -165,7 +168,7 @@ app/
     ingest.py             # persistence: email -> attachment -> order -> products
     orders.py             # status machine + stock application
     suppliers.py
-  templates/              # Jinja + HTMX fragments (settings + sync status)
+  templates/              # Jinja + HTMX fragments (settings, sync status, guide)
   static/                 # CSS and vendored htmx.min.js
 tests/
 data/                     # SQLite DB + attachments (gitignored)

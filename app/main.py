@@ -474,6 +474,11 @@ def sync_status(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/guide", response_class=HTMLResponse)
+def guide_page(request: Request):
+    return templates.TemplateResponse(request, "guide.html", {})
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}

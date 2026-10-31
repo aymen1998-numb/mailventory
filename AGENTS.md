@@ -17,7 +17,9 @@ order parser → SQLite inventory/orders. No cloud backend, no JS build step.
 
 - `app/main.py` holds every HTTP route and Jinja filter. UI is server-rendered;
   HTMX is vendored at `app/static/htmx.min.js` — do not reintroduce a CDN or a
-  frontend build tool.
+  frontend build tool. The user-facing Guide lives at `/guide`
+  (`templates/guide.html`); update it when a flow or status name changes, and keep
+  it free of database access so it renders without a schema.
 - Gmail credentials are entered at `/settings`, stored in `.env` by
   `services/credentials.py`, and read through `get_settings()` (call
   `cache_clear()` after writes). Never return the raw password to a template.

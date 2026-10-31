@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Guide · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Guide</h1>
+  <p class="muted">
+    From the first Gmail connection to tuning the parser. Everything here runs on
+    your machine; nothing is sent to a third party.
+  </p>
+</div>
+
+<section class="panel">
+  <h2>Quick start</h2>
+  <ol class="steps">
+    <li>Create a Google <strong>app password</strong> (2-step verification required).</li>
+    <li>Paste it into <a href="/settings">Settings</a>, click <strong>Test connection</strong>.</li>
+    <li>Start a sync, then review the result under <a href="/emails">Emails</a>.</li>
+  </ol>
+  <p class="hint">
+    Want to look around first? Seed sample data with
+    <code>python -m app.cli seed-demo</code> — no Gmail account needed.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="gmail">1. Connect Gmail</h2>
+  <p>
+    This app reads mail over IMAP with a password Google generates for one app.
+    Your normal Google password will not work.
+  </p>
+  <ol class="steps">
+    <li>Turn on 2-step verification: <a href="https://myaccount.google.com/security" target="_blank" rel="noreferrer">myaccount.google.com/security</a></li>
+    <li>Create a password at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>. Name it anything.</li>
+    <li>Copy the 16 characters and paste them into <a href="/settings">Settings</a>.</li>
+  </ol>
+  <p class="hint">
+    Spaces are removed automatically, so pasting <code>abcd efgh ijkl mnop</code> is
+    fine. The password is written to <code>.env</code> in the project folder, in
+    plain text — use a password you can revoke, and never commit that file.
+  </p>
+  <p class="hint">
+    <strong>Why a password and not “Sign in with Google”?</strong> Google's OAuth
+    scopes for reading mail are restricted, so a client needs a Cloud project,
+    verification and a security review to leave test mode — and test-mode tokens
+    expire every 7 days. For a single-user local tool, an app password is the
+    smaller, more reliable setup.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="sync">2. Sync your mail</h2>
+  <p>
+    Two buttons on <a href="/settings">Settings</a>:
+  </p>
+  <table>
+    <thead><tr><th>Action</th><th>What it does</th><th>When to use it</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Sync new PDF mail</strong></td>
+        <td>Continues from the last processed IMAP UID</td>
+        <td>Normal, repeat use</td>
+      </tr>
+      <tr>
+        <td><strong>Re-scan all PDF mail</strong></td>
+        <td>Resets the checkpoint and walks the whole mailbox</td>
+        <td>After widening the search query, or a fresh database</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="hint">
+    The scan opens Gmail's <strong>All Mail</strong> folder (detected automatically,
+    archived mail included) and only downloads PDF attachments. The default query is
+    <code>has:attachment filename:pdf</code>; any Gmail syntax works, for example
+    <code>has:attachment filename:pdf from:acme.com after:2026/01/01</code>.
+  </p>
+  <p class="hint">
+    <strong>Start with a small cap.</strong> Set
+    <code>Max emails per sync</code> to 25 for the first run. Emails are fetched one
+    at a time, so a 20,000-message mailbox takes a while. A positive cap resumes on
+    the next run; <code>0</code> means no limit.
+  </p>
+  <p class="hint">
+    Mail is opened <strong>read-only</strong>: nothing is marked as read, moved or
+    deleted. Duplicates are skipped by <code>Message-ID</code>, so re-running is safe.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="orders">3. Orders and stock</h2>
+  <p>
+    A parsed PDF becomes an order with line items, and each line item becomes a
+    product. When no order number is found the app generates
+    <code>MAIL-&lt;email&gt;-&lt;n&gt;</code>.
+  </p>
+  <table>
+    <thead><tr><th>Status</th><th>Can move to</th></tr></thead>
+    <tbody>
+      {% for status in statuses %}
+      <tr>
+        <td><span class="badge status-{{ status }}">{{ status }}</span></td>
+        <td>{{ allowed_next(status) | reject("equalto", status) | join(", ") or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="notice">
+    <strong>Stock moves exactly once</strong>, when an order is marked
+    <strong>received</strong>. Ingestion never touches stock, and receiving the same
+    order twice does not double it. Corrections belong in the manual adjustment on
+    the <a href="/inventory">Inventory</a> page, which is recorded per product.
+  </div>
+  <p class="hint">
+    <strong>Inventory</strong> also takes a reorder level per product; anything at or
+    below it is listed on the dashboard. Every change is stored as a stock movement
+    with a reason, so manual edits stay auditable.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="parsing">4. When a PDF does not parse</h2>
+  <p>
+    Parsing is deliberately rule based, not a magic model. Each attachment gets a
+    status on the <a href="/emails">Emails</a> page:
+  </p>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge status-parsed">parsed</span></td><td>Order created</td><td>Nothing</td></tr>
+      <tr><td><span class="badge status-needs_review">needs_review</span></td><td>Text read, but no line items matched</td><td>Open the extracted text and tune the patterns</td></tr>
+      <tr><td><span class="badge status-needs_ocr">needs_ocr</span></td><td>No text layer — a scanned image</td><td>Install the OCR extras, or enter the order by hand</td></tr>
+      <tr><td><span class="badge status-duplicate">duplicate</span></td><td>That order number already exists</td><td>Nothing — it is a re-send</td></tr>
+      <tr><td><span class="badge status-error">error</span></td><td>The PDF could not be opened</td><td>The message under the status says why</td></tr>
+    </tbody>
+  </table>
+  <p>
+    To support a new supplier layout:
+  </p>
+  <ol class="steps">
+    <li>Open the email and expand <strong>Extracted text</strong>.</li>
+    <li>
+      If the values are there but unrecognised, adjust the patterns in
+      <code>app/services/pdf_parser.py</code>:
+      <code>ORDER_NUMBER_RE</code>, <code>DATE_RE</code>, <code>TOTAL_RE</code>,
+      <code>ITEM_LINE_RE</code>, or the column words in <code>TABLE_HEADER_HINTS</code>.
+    </li>
+    <li>Add a case to <code>tests/test_pdf_parser.py</code> (or <code>tests/test_pdf_tables.py</code>) so the layout keeps working.</li>
+    <li>Re-scan all mail to rebuild the affected orders.</li>
+  </ol>
+  <p class="hint">
+    PDFs with ruled tables are read column by column, which is far more reliable
+    than matching single lines. A table is only used when its header row has a
+    description and a quantity column plus a price or total column, so address
+    blocks and signature boxes are ignored.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="forms">5. Fillable forms (optional)</h2>
+  <p>
+    <strong>Make fillable</strong> on an email's attachment writes a copy of the PDF
+    with empty, clickable fields — handy for filling in a supplier's blank order
+    form. It detects where fields should go; it does not read values, so it is not
+    part of parsing.
+  </p>
+  <p class="hint">
+    The work is done by the separate
+    <a href="https://github.com/jbarrow/commonforms" target="_blank" rel="noreferrer">commonforms</a>
+    command, which you install yourself: <code>pipx install commonforms</code>. Then
+    enable it under <a href="/settings">Settings</a>, section 3. Nothing from that
+    project is bundled or imported here.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="troubleshooting">6. Troubleshooting</h2>
+  <table>
+    <thead><tr><th>Symptom</th><th>Most likely cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>Gmail login failed: ... Invalid credentials</code></td>
+        <td>Normal Google password, or app passwords are blocked</td>
+        <td>Use a 16-character app password. If it still fails: Workspace admins can disable them, and Advanced Protection blocks them.</td>
+      </tr>
+      <tr>
+        <td><code>Could not reach imap.gmail.com:993</code></td>
+        <td>Network, VPN or proxy blocked the connection</td>
+        <td>Check the connection and retry</td>
+      </tr>
+      <tr>
+        <td><code>A sync is already running</code></td>
+        <td>Only one sync may run at a time</td>
+        <td>Wait for the progress bar to finish</td>
+      </tr>
+      <tr>
+        <td>Test succeeds, but no orders appear</td>
+        <td>No PDFs match the query, or they are unparseable</td>
+        <td>Check the count on the settings page, then the statuses under Emails</td>
+      </tr>
+      <tr>
+        <td>Everything is <code>needs_ocr</code></td>
+        <td>The PDFs are scans with no text layer</td>
+        <td>Install the OCR extras (see README) and set <code>OCR_ENABLED=true</code></td>
+      </tr>
+      <tr>
+        <td>“commonforms command was not found”</td>
+        <td>The optional tool is not installed</td>
+        <td><code>pipx install commonforms</code>, then retry</td>
+      </tr>
+      <tr>
+        <td>The UI looks stale after a code change</td>
+        <td>The server is still running the old code</td>
+        <td>Restart uvicorn, or run it with <code>--reload</code></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2 id="data">7. Where your data lives</h2>
+  <table>
+    <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td><code>.env</code></td><td>Gmail address and app password, plain text. Git-ignored.</td></tr>
+      <tr><td><code>data/orderdesk.db</code></td><td>Emails, attachments metadata, products, orders, stock movements</td></tr>
+      <tr><td><code>data/attachments/email-&lt;id&gt;/</code></td><td>The PDFs saved from your mail, plus any fillable copies</td></tr>
+    </tbody>
+  </table>
+  <p class="hint">
+    Message bodies are stored locally so you can see what the parser read. Keep the
+    Gmail query narrow if you would rather not keep them. The app binds to
+    <code>127.0.0.1</code> only — do not expose it to the internet.
+  </p>
+  <p class="hint">
+    Deleting <code>data/</code> resets the app. There are no migrations yet, so a
+    schema change also means starting from an empty database.
+  </p>
+</section>
+
+<section class="panel">
+  <h2 id="cli">8. Command line</h2>
+  <pre>python -m app.cli sync          # new mail only
+python -m app.cli sync --all    # re-scan everything
+python -m app.cli ingest --limit 10
+python -m app.cli seed-demo     # sample data, no Gmail needed</pre>
+  <p class="hint">
+    The sync buttons use the same code, so a background sync and a CLI sync never
+    run at the same time — the app refuses the second one.
+  </p>
+</section>
+{% endblock %}

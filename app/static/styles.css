@@ -148,6 +148,8 @@ button.link { border: none; background: none; color: var(--accent); padding: 0 4
 .status-failed { background: #feecec; color: var(--danger); }
 
 .hint { color: var(--muted); font-size: 12.5px; }
+.steps { margin: 10px 0 12px; padding-left: 22px; display: grid; gap: 6px; font-size: 13.5px; }
+.steps li { line-height: 1.5; }
 .settings-form { display: grid; gap: 14px; max-width: 620px; }
 .settings-form label { display: grid; gap: 5px; font-size: 13px; color: var(--muted); }
 .settings-form input { width: 100%; }
