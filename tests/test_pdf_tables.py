@@ -6,7 +6,6 @@ import pytest
 from app.services import fillable_forms
 from app.services.pdf_parser import _classify_header_cell, items_from_tables, parse_order
 
-
 TABLE = [
     ["SKU", "Description", "Qty", "Unit Price", "Line Total"],
     ["SKU-100", "Widget A", "10", "12.50", "125.00"],

@@ -2,7 +2,6 @@ from decimal import Decimal
 
 from app.services.pdf_parser import parse_order
 
-
 SAMPLE = """ACME Supplies Ltd
 Purchase Order No: PO-1042
 Order Date: 2024-03-15
