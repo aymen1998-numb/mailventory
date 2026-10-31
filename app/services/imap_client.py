@@ -25,6 +25,47 @@ class ImapError(RuntimeError):
     pass
 
 
+# Google's IMAP errors are terse and identical for several unrelated causes, so
+# each known one gets the fix attached to it.
+LOGIN_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        (
+            "invalid credentials",
+            "authentication failed",
+            "username and password not accepted",
+        ),
+        "Google rejected that password. Enter the 16-character app password from "
+        "myaccount.google.com/apppasswords (spaces are stripped automatically), not "
+        "your normal Google password. If the password is definitely right, app "
+        "passwords may be blocked for this account: Workspace admins can disable "
+        "them and Google's Advanced Protection programme blocks them outright.",
+    ),
+    (
+        ("application-specific password", "app password required"),
+        "This account needs an app password: turn on 2-step verification, then "
+        "create one at myaccount.google.com/apppasswords.",
+    ),
+    (
+        ("web login required", "please log in with your web browser"),
+        "Google wants a browser sign-in for this account first. Sign in at "
+        "mail.google.com, then retry the app password.",
+    ),
+    (
+        ("too many simultaneous", "rate limit", "limit exceeded"),
+        "Gmail is throttling logins for this account. Close other mail clients "
+        "(phone, Outlook) and try again in a minute.",
+    ),
+)
+
+
+def describe_login_error(exc: Exception) -> str:
+    text = str(exc).lower()
+    for needles, hint in LOGIN_HINTS:
+        if any(needle in text for needle in needles):
+            return f"{exc} — {hint}"
+    return str(exc)
+
+
 @dataclass
 class FetchedAttachment:
     filename: str
@@ -49,12 +90,19 @@ def imap_session(settings: Settings):
             "Gmail IMAP is not configured. Add your address and app password first."
         )
 
-    client = imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port, timeout=30)
+    try:
+        client = imaplib.IMAP4_SSL(settings.imap_host, settings.imap_port, timeout=30)
+    except OSError as exc:
+        raise ImapError(
+            f"Could not reach {settings.imap_host}:{settings.imap_port} ({exc}). "
+            "Check your network, VPN or proxy."
+        ) from exc
+
     try:
         try:
             client.login(settings.gmail_address, settings.gmail_app_password)
         except imaplib.IMAP4.error as exc:
-            raise ImapError(f"Gmail login failed: {exc}") from exc
+            raise ImapError(f"Gmail login failed: {describe_login_error(exc)}") from exc
         yield client
     finally:
         try:
