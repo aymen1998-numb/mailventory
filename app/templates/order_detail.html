@@ -9,6 +9,21 @@
     <span class="badge status-{{ order.status }}">{{ order.status }}</span>
     {% if order.stock_applied %}<span class="badge">stock applied</span>{% endif %}
   </p>
+  <div class="actions">
+    <a class="pill" href="/orders/{{ order.id }}/edit">Edit order</a>
+    {% if attachment %}
+    <form class="inline" method="post" action="/orders/{{ order.id }}/reparse">
+      <button type="submit"{% if order.stock_applied %} disabled{% endif %}>Reparse PDF</button>
+      <span class="hint">
+        {% if order.stock_applied %}
+        Already received, so re-parsing is disabled
+        {% else %}
+        Re-read {{ attachment.filename }} with the current parser
+        {% endif %}
+      </span>
+    </form>
+    {% endif %}
+  </div>
 </div>
 
 <section class="cards">

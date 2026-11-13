@@ -170,6 +170,66 @@ def _ingest_attachment(
     return True
 
 
+class ReparseError(ValueError):
+    """Re-parsing one stored PDF failed; the message is shown to the user."""
+
+
+def reparse_order(
+    db: Session, order: Order, attachment: Attachment, settings: Settings
+) -> int:
+    """Re-run the parser on one stored PDF and replace the order's line items.
+
+    Header values the person corrected by hand (supplier, order number) are kept;
+    descriptive fields the PDF is authoritative for are refreshed. Stock is never
+    touched here, so callers must refuse orders whose stock was already applied.
+    """
+    try:
+        content = extract_pdf(Path(attachment.path), ocr_enabled=settings.ocr_enabled)
+    except Exception as exc:
+        raise ReparseError(f"Could not read the PDF: {exc}") from exc
+
+    attachment.extracted_text = content.text
+    if not content.text:
+        raise ReparseError("The PDF has no text layer. Scanned files need the OCR extras.")
+
+    parsed = parse_order(
+        content.text,
+        supplier_hint=order.supplier,
+        order_number_hint=order.order_number,
+        tables=content.tables,
+    )
+    if not parsed.items:
+        raise ReparseError("Still no line items. Tune the parser patterns, then try again.")
+
+    order.items.clear()
+    db.flush()
+    for item in parsed.items:
+        product = get_or_create_product(db, sku=item.sku, name=item.description)
+        order.items.append(
+            OrderItem(
+                product_id=product.id,
+                sku=item.sku,
+                description=item.description,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                line_total=item.line_total,
+            )
+        )
+
+    total = parsed.total_amount
+    if total is None:
+        total = sum((item.line_total or Decimal("0") for item in parsed.items), Decimal("0"))
+    order.supplier = parsed.supplier or order.supplier
+    order.order_date = parsed.order_date or order.order_date
+    order.currency = parsed.currency or order.currency
+    order.total_amount = total
+    order.notes = f"Re-parsed from {attachment.filename} ({content.method} extraction)"
+    attachment.parse_status = "parsed"
+    attachment.parse_error = None
+    db.flush()
+    return len(parsed.items)
+
+
 def get_or_create_product(
     db: Session, *, sku: str | None, name: str, unit: str = "pcs"
 ) -> Product:

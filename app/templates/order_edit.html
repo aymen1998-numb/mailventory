@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ order.order_number }} · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <a class="small" href="/orders/{{ order.id }}">← {{ order.order_number }}</a>
+  <h1>Edit order</h1>
+  <p class="muted">Corrections are stored locally; the source PDF is never modified.</p>
+</div>
+
+{% if error %}<div class="flash danger">{{ error }}</div>{% endif %}
+
+{% if order.stock_applied %}
+<div class="notice">
+  Stock for this order was already applied, so quantities and the set of line items
+  are locked. Correct descriptions and prices here; adjust quantities on the
+  <a href="/inventory">Inventory</a> page.
+</div>
+{% endif %}
+
+<form method="post" action="/orders/{{ order.id }}/edit">
+  <section class="panel">
+    <h2>Order</h2>
+    <div class="field-grid">
+      <label>Order number
+        <input name="order_number" value="{{ form.order_number }}" required>
+      </label>
+      <label>Supplier
+        <input name="supplier" value="{{ form.supplier }}">
+      </label>
+      <label>Order date
+        <input type="date" name="order_date" value="{{ form.order_date }}">
+      </label>
+      <label>Currency
+        <input name="currency" value="{{ form.currency }}" maxlength="3" size="4">
+      </label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Line items</h2>
+    <table class="edit-table">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Description</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit price</th>
+          <th class="num">Line total</th>
+          <th>Row</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr{% if not row.item_id %} class="blank-row"{% endif %}>
+          <td>
+            <input type="hidden" name="item_id" value="{{ row.item_id or '' }}">
+            <input name="sku" value="{{ row.sku }}" size="10"{% if order.stock_applied %} readonly{% endif %}>
+          </td>
+          <td><input name="description" value="{{ row.description }}"></td>
+          <td><input class="tiny" name="quantity" value="{{ row.quantity }}"{% if order.stock_applied %} readonly{% endif %}></td>
+          <td><input class="tiny" name="unit_price" value="{{ row.unit_price }}"></td>
+          <td><input class="tiny" name="line_total" value="{{ row.line_total }}"></td>
+          <td>
+            {% if order.stock_applied %}
+            <input type="hidden" name="row_action" value="keep">
+            <span class="hint">locked</span>
+            {% else %}
+            <select name="row_action">
+              <option value="keep">keep</option>
+              <option value="delete">delete</option>
+            </select>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">
+      Leave an empty row blank to ignore it. When a unit price is given the line
+      total is recalculated as quantity × price; otherwise the total you type is
+      kept. The order total is the sum of the line totals.
+    </p>
+    <div class="actions">
+      <button class="primary" type="submit">Save changes</button>
+      <a class="small" href="/orders/{{ order.id }}">Cancel</a>
+    </div>
+  </section>
+</form>
+{% endblock %}

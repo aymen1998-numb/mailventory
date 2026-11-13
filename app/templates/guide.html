@@ -117,6 +117,33 @@
 </section>
 
 <section class="panel">
+  <h2 id="corrections">3b. Correcting a parsed order</h2>
+  <p>
+    The parser is rule based, so it can misread a supplier's layout. Every order has
+    an <strong>Edit order</strong> button on its detail page:
+  </p>
+  <ul class="steps">
+    <li>Fix the order number, supplier, date, currency or any line item.</li>
+    <li>Add a line in a blank row; set a row to <strong>delete</strong> to drop it.</li>
+    <li>
+      A line total is recalculated as quantity × unit price whenever a price is
+      given, and the order total becomes the sum of the lines.
+    </li>
+  </ul>
+  <p class="hint">
+    <strong>Reparse PDF</strong> re-runs the current parser against the stored PDF
+    and replaces the line items — the quickest way to apply a regex fix to one order
+    without re-syncing the mailbox.
+  </p>
+  <div class="notice">
+    Once an order is <strong>received</strong>, its stock has already moved. Quantities
+    and the set of line items are then locked, and re-parsing is disabled; correct the
+    stock with a manual adjustment on the Inventory page instead. Prices and
+    descriptions stay editable.
+  </div>
+</section>
+
+<section class="panel">
   <h2 id="parsing">4. When a PDF does not parse</h2>
   <p>
     Parsing is deliberately rule based, not a magic model. Each attachment gets a
@@ -144,7 +171,10 @@
       <code>ITEM_LINE_RE</code>, or the column words in <code>TABLE_HEADER_HINTS</code>.
     </li>
     <li>Add a case to <code>tests/test_pdf_parser.py</code> (or <code>tests/test_pdf_tables.py</code>) so the layout keeps working.</li>
-    <li>Re-scan all mail to rebuild the affected orders.</li>
+    <li>
+      Open the affected order and click <strong>Reparse PDF</strong> — no mailbox
+      re-scan needed. Re-scan all mail only when the extraction itself changed.
+    </li>
   </ol>
   <p class="hint">
     PDFs with ruled tables are read column by column, which is far more reliable

@@ -46,6 +46,10 @@ order parser → SQLite inventory/orders. No cloud backend, no JS build step.
 - `services/orders.py` is the status machine. Stock increases exactly once when
   status becomes `received`, guarded by `Order.stock_applied`. Never adjust stock
   during ingestion.
+- `services/order_edit.py` is the human correction path: it validates a submitted
+  edit form, recalculates line totals, and refuses quantity or line-item changes
+  once `stock_applied` is set. `ingest.reparse_order()` re-reads one stored PDF and
+  replaces the items; both paths stay real-time, never queued.
 - Config comes from `.env` via `app/config.py`; DB is `data/orderdesk.db`, both
   gitignored with `data/attachments/`.
 

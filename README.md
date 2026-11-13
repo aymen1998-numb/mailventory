@@ -19,6 +19,7 @@ heuristic order parser → SQLite orders, products and stock movements → HTMX 
 - Heuristic parsing of order number, supplier, date, line items and totals
 - Product catalogue created automatically from parsed line items
 - Order workflow: `new → confirmed → shipped → received → closed` (or `cancelled`)
+- Human correction path: edit any order, add/remove lines, or re-parse one PDF
 - Stock is increased exactly once, when an order is marked `received`
 - Dashboard, order table, inventory with manual adjustments, email/PDF viewer
 - Optional OCR hook for scanned PDFs (Tesseract + Poppler)

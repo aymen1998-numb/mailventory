@@ -28,7 +28,14 @@ from .services import fillable_forms
 from .services.credentials import mask_secret, update_env
 from .services.gmail_sync import get_running_run, mark_interrupted_runs, start_sync
 from .services.imap_client import ImapError, fetch_emails, test_connection
-from .services.ingest import ingest_emails
+from .services.ingest import ReparseError, ingest_emails, reparse_order
+from .services.order_edit import (
+    OrderEditError,
+    apply_edit,
+    blank_rows,
+    rows_from_form,
+    rows_from_order,
+)
 from .services.orders import STATUSES, OrderTransitionError, allowed_next, change_status
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -136,8 +143,7 @@ def orders_page(
     )
 
 
-@app.get("/orders/{order_id}", response_class=HTMLResponse)
-def order_detail(order_id: int, request: Request, db: Session = Depends(get_db)):
+def _order_or_404(db: Session, order_id: int) -> Order:
     order = db.scalar(
         select(Order)
         .options(selectinload(Order.items).selectinload(OrderItem.product))
@@ -145,13 +151,128 @@ def order_detail(order_id: int, request: Request, db: Session = Depends(get_db))
     )
     if order is None:
         raise HTTPException(404, "Order not found")
+    return order
+
+
+def _form_header(order: Order) -> dict[str, str]:
+    return {
+        "order_number": order.order_number,
+        "supplier": order.supplier or "",
+        "order_date": order.order_date.isoformat() if order.order_date else "",
+        "currency": order.currency,
+    }
+
+
+@app.get("/orders/{order_id}", response_class=HTMLResponse)
+def order_detail(
+    order_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    flash: str | None = None,
+):
+    order = _order_or_404(db, order_id)
     attachment = db.get(Attachment, order.attachment_id) if order.attachment_id else None
     email = db.get(EmailMessage, order.email_id) if order.email_id else None
     return templates.TemplateResponse(
         request,
         "order_detail.html",
-        {"order": order, "attachment": attachment, "email": email},
+        {
+            "order": order,
+            "attachment": attachment,
+            "email": email,
+            "flash": flash,
+            "rows": rows_from_order(order),
+        },
     )
+
+
+def _order_edit_page(
+    request: Request,
+    order: Order,
+    *,
+    rows: list | None = None,
+    form: dict[str, str] | None = None,
+    error: str | None = None,
+    status_code: int = 200,
+):
+    return templates.TemplateResponse(
+        request,
+        "order_edit.html",
+        {
+            "order": order,
+            "rows": rows
+            if rows is not None
+            else rows_from_order(order) + ([] if order.stock_applied else blank_rows(2)),
+            "form": form or _form_header(order),
+            "error": error,
+        },
+        status_code=status_code,
+    )
+
+
+@app.get("/orders/{order_id}/edit", response_class=HTMLResponse)
+def order_edit_form(order_id: int, request: Request, db: Session = Depends(get_db)):
+    return _order_edit_page(request, _order_or_404(db, order_id))
+
+
+@app.post("/orders/{order_id}/edit", response_class=HTMLResponse)
+async def order_edit_submit(
+    order_id: int, request: Request, db: Session = Depends(get_db)
+):
+    order = _order_or_404(db, order_id)
+    submitted = await request.form()
+    header = {
+        "order_number": str(submitted.get("order_number") or ""),
+        "supplier": str(submitted.get("supplier") or ""),
+        "order_date": str(submitted.get("order_date") or ""),
+        "currency": str(submitted.get("currency") or ""),
+    }
+    rows = rows_from_form(submitted)
+
+    try:
+        apply_edit(db, order, rows=rows, **header)
+        db.commit()
+    except OrderEditError as exc:
+        db.rollback()
+        # Keep what was typed so the mistake can be fixed in place.
+        return _order_edit_page(
+            request, order, rows=rows, form=header, error=str(exc), status_code=400
+        )
+
+    flash = "Order updated. Stock was not touched."
+    return RedirectResponse(f"/orders/{order.id}?flash={quote(flash)}", status_code=303)
+
+
+@app.post("/orders/{order_id}/reparse")
+def order_reparse(order_id: int, db: Session = Depends(get_db)):
+    order = _order_or_404(db, order_id)
+    back = f"/orders/{order.id}"
+
+    if order.stock_applied:
+        return RedirectResponse(
+            back
+            + "?flash="
+            + quote(
+                "Stock for this order is already applied, so it cannot be re-parsed. "
+                "Correct the line items by hand instead."
+            ),
+            status_code=303,
+        )
+    attachment = db.get(Attachment, order.attachment_id) if order.attachment_id else None
+    if attachment is None:
+        return RedirectResponse(
+            back + "?flash=" + quote("This order has no stored PDF to re-parse."),
+            status_code=303,
+        )
+
+    try:
+        count = reparse_order(db, order, attachment, get_settings())
+        db.commit()
+        message = f"Re-parsed {attachment.filename}: {count} line item(s)."
+    except ReparseError as exc:
+        db.rollback()
+        message = str(exc)
+    return RedirectResponse(back + "?flash=" + quote(message), status_code=303)
 
 
 @app.post("/orders/{order_id}/status", response_class=HTMLResponse)
