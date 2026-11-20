@@ -18,6 +18,18 @@ dependencies = [
 dev = ["pytest>=8.3", "httpx>=0.27", "ruff>=0.6"]
 ocr = ["pytesseract>=0.3.13", "pdf2image>=1.17", "pillow>=10.4"]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# migrations/ is Alembic's script directory, not a package. Without this,
+# setuptools sees two top-level packages (app, migrations) and refuses to build.
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["templates/**/*.html", "static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
